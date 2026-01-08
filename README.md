@@ -17,7 +17,6 @@ Install directly from GitHub:
 
 ```bash
 pip install "git+https://github.com/Cgyc20/Integrated-srcm-ssa.git"
-"
 ```
 
 This will automatically install:
