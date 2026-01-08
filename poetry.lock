@@ -90,14 +90,16 @@ optional = false
 python-versions = ">=3.12,<3.15"
 groups = ["main"]
 files = []
-develop = true
+develop = false
 
 [package.dependencies]
 numpy = "*"
 
 [package.source]
-type = "directory"
-url = "../../srcm-engine"
+type = "git"
+url = "https://github.com/Cgyc20/srcm-engine.git"
+reference = "main"
+resolved_reference = "255988baba0f6f7cd02e38d92ece22c7daf5a4e3"
 
 [[package]]
 name = "stochastic-framework"
@@ -107,13 +109,15 @@ optional = false
 python-versions = "^3.12"
 groups = ["main"]
 files = []
-develop = true
+develop = false
 
 [package.source]
-type = "directory"
-url = "../../stochastic_framework"
+type = "git"
+url = "https://github.com/Cgyc20/stochastic_framework.git"
+reference = "main"
+resolved_reference = "9037b589f9f6664b2bd573c7f282901c01f13396"
 
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<3.15"
-content-hash = "b763cdddfb61c96560bf8fb5a10b088e015a794537b36d17ed152e0133e65e67"
+content-hash = "27b8dc06db34412e673331bf962e39655c3ed7fc30447d3e022c45a45c7bea08"
