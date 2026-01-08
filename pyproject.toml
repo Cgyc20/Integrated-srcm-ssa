@@ -7,6 +7,11 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = ">=3.12,<3.15"
+numpy = "*"
+matplotlib = "*"
+tqdm = "*"
+pandas = "*"
+
 srcm-engine = { git = "https://github.com/Cgyc20/srcm-engine.git", rev = "main" }
 stochastic-framework = { git = "https://github.com/Cgyc20/stochastic_framework.git", rev = "main" }
 
