@@ -83,17 +83,25 @@ def format_stoich(species_data):
     return str(species_data)
 
 def try_decode_meta(meta_raw):
-    """Best-effort decode of meta_json stored in various numpy ways."""
+    """
+    Returns (decoded_dict, err)
+    - decoded_dict: dict | None
+    - err: Exception | None
+    """
     try:
-        # meta_raw might be a 0-d array, bytes, or already a string
+        # meta_raw might be a 0-d numpy array, bytes, or already a string
         if hasattr(meta_raw, "shape") and meta_raw.shape == ():
             meta_raw = meta_raw.item()
+
         if isinstance(meta_raw, (bytes, bytearray)):
             meta_raw = meta_raw.decode("utf-8", errors="replace")
-        return json.loads(str(meta_raw))
+
+        decoded = json.loads(str(meta_raw))
+        return decoded, None
+
     except Exception as e:
         return None, e
-    return None, None
+
 
 def print_table(rows, headers, col_widths, *, indent=0):
     """Simple fixed-width table with box-drawing separators."""
