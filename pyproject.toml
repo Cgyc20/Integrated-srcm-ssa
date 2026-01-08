@@ -6,9 +6,9 @@ authors = ["Cgyc20 <cgyc20@bath.ac.uk>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.12,<3.15"  # Updated to match srcm-engine's requirement
-srcm-engine = {path = "/Users/charliecameron/CodingHub/PhD/Y2_code/srcm-engine"}
-stochastic_framework = {path = "/Users/charliecameron/CodingHub/PhD/Y2_code/stochastic_framework/stochastic_framework"}
+python = ">=3.12,<3.15"
+srcm-engine = { path = "/Users/charliecameron/CodingHub/PhD/Y2_code/srcm-engine", develop = true }
+stochastic-framework = { path = "/Users/charliecameron/CodingHub/PhD/Y2_code/stochastic_framework", develop = true }
 
 
 [build-system]

@@ -1,0 +1,4 @@
+data/
+*.npz
+data/hybrid_results.npz
+data/ssa_results.npz

@@ -9,6 +9,7 @@ from srcm_engine.animation_util.animate import animate_overlay, animate_results
 sim = SRCMRunner(species=["A", "B"])
 sim.define_rates(alpha=0.01, beta=0.01)
 sim.define_diffusion(A=0.1, B=0.1)
+sim.define_conversion(threshold=20, rate=2.0)
 
 sim.add_reaction({"A": 1}, {"B": 1}, "alpha")
 sim.add_reaction({"B": 1}, {"A": 1}, "beta")
@@ -27,7 +28,7 @@ B_init[3*K//4:] = 10
 # 3. Run Simulations
 L, total_time, dt = 10.0, 30.0, 0.006
 
-n_repeats = 1
+n_repeats = 100
 # 3. Run Simulations (Capture both results AND meta)
 res_ssa, meta_ssa = sim.run_ssa(
     L=L, K=K, total_time=total_time, dt=dt, 
@@ -59,18 +60,5 @@ cfg = AnimationConfig(
     title="SRCM Hybrid vs Pure SSA Comparison",
     mass_plot_mode="none"
 )
-
-# This compares your Hybrid result (Main) against the Pure SSA (Overlay)
-
-animate_results(res_hybrid,
-                cfg=cfg,
-                )
-# animate_overlay(
-#     res_hybrid, 
-#     res_ssa, 
-#     cfg=cfg, 
-#     label_main="Hybrid (SRCM)", 
-#     label_overlay="Pure SSA"
-# )
 
 plt.show()
