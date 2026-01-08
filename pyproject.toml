@@ -17,6 +17,6 @@ build-backend = "poetry.core.masonry.api"
 
 
 [tool.poetry.scripts]
-inspect = "integrated_srcm_ssa.tools.inspect:main"
-animate = "integrated_srcm_ssa.tools.animate:main"
+srcm-inspect = "integrated_srcm_ssa.tools.inspect:main"
+srcm-animate = "integrated_srcm_ssa.tools.animate:main"
 
