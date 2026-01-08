@@ -40,11 +40,11 @@ $$
 B \xrightarrow{\beta} A \end{aligned} 
 $$
 With corresponding PDE:
+
 $$
 \begin{aligned}
 \frac{\partial \langle A \rangle}{\partial t} &= D_A \nabla^2 \langle A \rangle + \beta \langle B \rangle - \alpha \langle A \rangle ,
- \\\frac{\partial \langle B \rangle}{\partial t} &= D_B \nabla^2 \langle B \rangle + \alpha \langle A \rangle - \beta \langle B \rangle.\end{aligned} 
-\end{aligned}
+ \\ \frac{\partial \langle B \rangle}{\partial t} &= D_B \nabla^2 \langle B \rangle + \alpha \langle A \rangle - \beta \langle B \rangle.\end{aligned} 
 $$
 
 ```python
