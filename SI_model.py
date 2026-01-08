@@ -17,7 +17,6 @@ sim.set_pde_reactions(lambda A, B, r: (
     r["alpha"] * A - r["beta"] * B,
 ))
 
-sim.describe()
 # 2. Define Initial State
 K = 40
 A_init = np.zeros(K, dtype=int)
@@ -28,24 +27,35 @@ B_init[3*K//4:] = 10
 # 3. Run Simulations
 L, total_time, dt = 10.0, 30.0, 0.006
 
-n_repeats = 10
-res_ssa = sim.run_ssa(L=L, K=K, total_time=total_time, dt=dt, 
-                      init_counts={"A": A_init, "B": B_init}, n_repeats=n_repeats)
+n_repeats = 1
+# 3. Run Simulations (Capture both results AND meta)
+res_ssa, meta_ssa = sim.run_ssa(
+    L=L, K=K, total_time=total_time, dt=dt, 
+    init_counts={"A": A_init, "B": B_init}, n_repeats=n_repeats
+)
 
-res_hybrid = sim.run_hybrid(L=L, K=K, pde_multiple=8, total_time=total_time, 
-                            dt=dt, init_counts={"A": A_init, "B": B_init}, repeats=n_repeats)
+res_hybrid, meta_hybrid = sim.run_hybrid(
+    L=L, K=K, pde_multiple=8, total_time=total_time, 
+    dt=dt, init_counts={"A": A_init, "B": B_init}, repeats=n_repeats
+)
 
-# 4. Save Hybrid Results
-save_npz(res_hybrid, "data/hybrid_results.npz", meta=sim.hybrid_model.metadata())
-# ADD THIS LINE:
-save_npz(res_ssa, "data/ssa_results.npz", meta={"type": "ssa_only", "n_repeats": n_repeats})
+# 4. Save Results (Pass the captured meta dictionaries)
+# This 'meta_hybrid' now contains your "reactions" list
+save_npz(res_hybrid, "data/hybrid_results.npz", meta=meta_hybrid)
+
+# This 'meta_ssa' contains the reaction rules used by the SSA engine
+save_npz(res_ssa, "data/ssa_results.npz", meta=meta_ssa)
+
+
 # 5. Animate the Comparison
 print("→ Launching Overlay Animation...")
 
 # Configure the visual style
 cfg = AnimationConfig(
     stride=20,           # Only plot every 20th frame to keep it smooth
-    interval_ms=30,      # Speed of playback
+    interval_ms=30,
+    show_threshold=True,
+              # Speed of playback
     title="SRCM Hybrid vs Pure SSA Comparison",
     mass_plot_mode="none"
 )
@@ -53,7 +63,8 @@ cfg = AnimationConfig(
 # This compares your Hybrid result (Main) against the Pure SSA (Overlay)
 
 animate_results(res_hybrid,
-                cfg=cfg)
+                cfg=cfg,
+                )
 # animate_overlay(
 #     res_hybrid, 
 #     res_ssa, 
