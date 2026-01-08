@@ -39,6 +39,7 @@ $$
 \begin{aligned} A \xrightarrow{\alpha} B\\
 B \xrightarrow{\beta} A \end{aligned} 
 $$
+
 With corresponding PDE:
 
 $$
