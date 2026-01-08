@@ -1,47 +1,90 @@
-## SRCM and SSA repo
+# Integrated SRCM–SSA
 
+This repository provides a **Spatial Regime Change Method (SRCM)** wrapper that integrates:
 
-This uses two codebases: The `srcm-engine` which is able to run the general srcm on any one dimensional two species system. This also uses the `stochastic-framework` local repo to do the stochastic reactions. 
+* **`srcm-engine`** — deterministic SRCM + PDE machinery for 1D two-species systems
+* **`stochastic-framework`** — stochastic reaction simulation (SSA)
 
+It also includes **command-line tools** to inspect and animate simulation outputs stored as `.npz` files.
 
-How to use the simulation runner:
-Import all relevant classes:
+Users only need to install **this package** — all required engines are installed automatically.
+
+---
+
+## Installation
+
+Install directly from GitHub:
+
+```bash
+pip install "git+https://github.com/Cgyc20/Integrated-srcm-ssa.git"
+"
+```
+
+This will automatically install:
+
+* `srcm-engine`
+* `stochastic-framework`
+* all required Python dependencies
+
+> **Tip:** we recommend installing inside a virtual environment.
+
+---
+
+## Python Usage: Running SRCM and SSA Simulations
+
+### Import required classes
 
 ```python
 import numpy as np
-import matplotlib.pyplot as plt
 from integrated_srcm_ssa import SRCMRunner
 from srcm_engine.results.io import save_npz
 ```
 
-And then to define the SRCM simulation we do the following:
+---
 
-So lets say we want to code in the reaction:
+### Example system
 
-$$
+We consider the reversible reaction system:
+
+[
 \begin{aligned}
-A \xrightarrow{\alpha} B, \\
-B \xrightarrow {\beta} A,
+A \xrightarrow{\alpha} B, \
+B \xrightarrow{\beta} A
 \end{aligned}
-$$
-With some rates. Then we define the following system
+]
 
-```
+---
+
+### Define the SRCM simulation
+
+```python
 sim = SRCMRunner(species=["A", "B"])
+
 sim.define_rates(alpha=0.01, beta=0.01)
 sim.define_diffusion(A=0.1, B=0.1)
 
 sim.add_reaction({"A": 1}, {"B": 1}, "alpha")
 sim.add_reaction({"B": 1}, {"A": 1}, "beta")
 ```
-The SRCM engine will automatically decompose these reactions into the subsequent sub-reactions within the SRCM framework - Please see [The Spatial Regime Hybrid method](https://www.mdpi.com/2227-7390/13/21/3406) (2025, Cameron et al.) for further details. 
 
-Following this we must actually add the corresonding PDE:
+The SRCM engine automatically decomposes reactions into the appropriate sub-reactions required by the hybrid SRCM framework.
 
-$$\begin{aligned}
-\frac{\partial \langle A \rangle}{\partial t} &= D_A \nabla^2 \langle A \rangle + \beta \langle B \rangle - \alpha \langle A \rangle \\
-\frac{\partial \langle B \rangle}{\partial t} &= D_B \nabla^2 \langle B \rangle + \alpha \langle A \rangle - \beta \langle B \rangle
-\end{aligned}$$
+For methodological details, see:
+**Cameron et al. (2025)** — *The Spatial Regime Hybrid Method*
+[https://www.mdpi.com/2227-7390/13/21/3406](https://www.mdpi.com/2227-7390/13/21/3406)
+
+---
+
+### Define the PDE system
+
+[
+\begin{aligned}
+\frac{\partial \langle A \rangle}{\partial t}
+&= D_A \nabla^2 \langle A \rangle + \beta \langle B \rangle - \alpha \langle A \rangle \
+\frac{\partial \langle B \rangle}{\partial t}
+&= D_B \nabla^2 \langle B \rangle + \alpha \langle A \rangle - \beta \langle B \rangle
+\end{aligned}
+]
 
 ```python
 sim.set_pde_reactions(lambda A, B, r: (
@@ -50,41 +93,52 @@ sim.set_pde_reactions(lambda A, B, r: (
 ))
 ```
 
-We then need to define the conversion threshold and conversion rate (the threshold is in terms of particle per box):
+---
+
+### Define conversion parameters
+
+The conversion threshold is measured in **particles per compartment**.
+
 ```python
 sim.define_conversion(threshold=10, rate=2.0)
 ```
 
-We then need to add in the domain details, the number of compartments and initial conditions:
+---
+
+### Domain, initial conditions, and time parameters
 
 ```python
-# =========================
-# Compartments and initial conditions
-# =========================
 K = 40
 A_init = np.zeros(K, dtype=int)
 B_init = np.zeros(K, dtype=int)
 
 A_init[:5] = 80
 B_init[-5:] = 80
-# =========================
-# Domain + time
-# =========================
+
 L = 20.0
 total_time = 30.0
 dt = 0.01
 n_repeats = 100
 ```
 
-The finally we need to run the models, both the **SRCM** and the pure **SSA** using the following code:
+---
+
+### Run simulations
+
+#### Pure SSA
 
 ```python
 res_ssa, meta_ssa = sim.run_ssa(
-    L=L, K=K, total_time=total_time, dt=dt,
+    L=L, K=K,
+    total_time=total_time, dt=dt,
     init_counts={"A": A_init, "B": B_init},
     n_repeats=n_repeats
 )
+```
 
+#### Hybrid SRCM
+
+```python
 res_hybrid, meta_hybrid = sim.run_hybrid(
     L=L, K=K, pde_multiple=8,
     total_time=total_time, dt=dt,
@@ -92,70 +146,93 @@ res_hybrid, meta_hybrid = sim.run_hybrid(
     repeats=n_repeats
 )
 ```
-And then we finally save the data into which ever folder. The metadata is also saved automatically. 
-```python
-save_npz(res_ssa, "data/conv_decay_make2A_ssa.npz", meta=meta_ssa)
-save_npz(res_hybrid, "data/conv_decay_make2A_hybrid.npz", meta=meta_hybrid)
 
+---
+
+### Save results
+
+Metadata is saved automatically alongside the simulation output.
+
+```python
+save_npz(res_ssa, "data/conv_decay_ssa.npz", meta=meta_ssa)
+save_npz(res_hybrid, "data/conv_decay_hybrid.npz", meta=meta_hybrid)
 ```
 
 ---
-## Inspect the npz files
 
-We have a feature to inspect the data to see the meta data such as the rates parameters, the system (i.e the SSA reactions) and so on.
+## Inspecting `.npz` Results
 
-To do this you need to run the `inspect_results.py` file using the following:
+After installation, the inspection tool is available globally.
 
 ```bash
-python inspect_results.py path/to/file/filename.npz
+srcm-inspect path/to/file.npz
 ```
+
+This prints:
+
+* array contents and shapes
+* reaction definitions
+* rate parameters
+* diffusion coefficients
+* domain and temporal metadata
+
+You may inspect multiple files at once:
+
+```bash
+srcm-inspect results/*.npz
+```
+
+---
 
 ## Animating Simulation Results
 
-This script lets you animate SRCM simulation results stored in `.npz` files. You can either animate a single result (typically a **Hybrid** simulation) or overlay two results (usually **Hybrid + SSA**) for comparison.
+Simulation outputs can be animated directly from `.npz` files.
 
-### Basic Usage
-
-To animate a single simulation file:
+### Animate a single result (typically Hybrid)
 
 ```bash
-python animate_npz.py path/to/simulation.npz
+srcm-animate path/to/simulation.npz
 ```
 
-This will open a matplotlib animation window showing the evolution of the system over time.
+---
 
-### Overlay Hybrid and SSA Results
-
-To overlay an SSA result on top of a Hybrid simulation:
+### Overlay Hybrid and SSA results
 
 ```bash
-python animate_npz.py hybrid_result.npz ssa_result.npz
+srcm-animate hybrid_result.npz ssa_result.npz
 ```
 
-The Hybrid result is used as the reference, and the SSA data is automatically adapted to match the domain.
+The hybrid result is used as the spatial reference, and SSA data is automatically adapted to match the domain.
 
-### Useful Options
+---
+
+### Useful options
 
 * `--stride N`
-  Skip frames to speed up the animation (default: `20`).
+  Skip frames to speed up animation (default: `20`)
 
 * `--interval MS`
-  Time between frames in milliseconds (default: `30`).
+  Time between frames in milliseconds (default: `30`)
 
 * `--title "My Title"`
-  Custom title for the animation window.
+  Custom animation title
 
 * `--mass {none,single,per_species}`
-  Enable mass plots if supported by the results.
+  Enable mass plots (if supported)
 
 * `--threshold VALUE`
-  Manually override the particle threshold.
+  Override particle conversion threshold
 
 * `--debug-keys`
-  Print the contents of the `.npz` file(s) for debugging.
+  Print `.npz` contents for debugging
+
+---
 
 ### Example
 
 ```bash
-python animate_npz.py results/hybrid.npz results/ssa.npz --stride 10 --mass per_species
+srcm-animate results/hybrid.npz results/ssa.npz \
+  --stride 10 \
+  --mass per_species
 ```
+
