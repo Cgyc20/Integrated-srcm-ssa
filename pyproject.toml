@@ -11,6 +11,7 @@ numpy = "*"
 matplotlib = "*"
 tqdm = "*"
 pandas = "*"
+joblib = "*"
 
 srcm-engine = { git = "https://github.com/Cgyc20/srcm-engine.git", rev = "main" }
 stochastic-framework = { git = "https://github.com/Cgyc20/stochastic_framework.git", rev = "main" }
