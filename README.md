@@ -37,7 +37,8 @@ Define your species, rates, and the governing physical laws of your system. For 
 
 $$
 \begin{aligned} A \xrightarrow{\alpha} B\\
-B \xrightarrow{\beta} A \end{aligned} 
+B \xrightarrow{\beta} A 
+\end{aligned} 
 $$
 
 With corresponding PDE:
