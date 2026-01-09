@@ -1,0 +1,63 @@
+name: predator_prey_lv
+title: "Predator–Prey (Lotka–Volterra)"
+description: >
+  Spatial predator–prey dynamics with autocatalytic predation.
+  Exhibits oscillations and travelling fronts.
+
+tags: [two-species, predator-prey, autocatalysis, second-order, demo]
+
+species: ["Prey", "Predator"]
+
+rates:
+  alpha: 1.0     # Prey birth
+  beta: 0.02     # Predation
+  mu: 0.8        # Predator death
+
+diffusion:
+  Prey: 0.2
+  Predator: 0.05
+
+conversion:
+  threshold: 15
+  rate: 2.0
+
+reactions:
+  - reactants: {Prey: 1}
+    products:  {Prey: 2}
+    rate: alpha        # Prey reproduction
+
+  - reactants: {Prey: 1, Predator: 1}
+    products:  {Predator: 2}
+    rate: beta         # Predation
+
+  - reactants: {Predator: 1}
+    products:  {}
+    rate: mu           # Predator death
+
+pde_model:
+  name: mass_action_two_species
+  terms:
+    dPrey: "alpha*Prey - beta*Prey*Predator"
+    dPredator: "beta*Prey*Predator - mu*Predator"
+
+domain:
+  L: 20.0
+  K: 36
+
+time:
+  total_time: 80.0
+  dt: 0.01
+  repeats: 30
+  pde_multiple: 8
+
+initial_conditions:
+  type: two_patches
+  patches:
+    - species: Prey
+      start: 0
+      end: 15
+      value: 60
+    - species: Predator
+      start: 35
+      end: 50
+      value: 20

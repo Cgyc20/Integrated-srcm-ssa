@@ -3,7 +3,7 @@ from integrated_srcm_ssa.presets import load_system
 from srcm_engine.results.io import save_npz
 
 # Load system from YAML
-sim, cfg = load_system("presets/my_system.yaml")
+sim, cfg = load_system("presets/SI_model.yaml")
 
 # Run simulations
 res_ssa, meta_ssa = sim.run_ssa(**cfg["ssa"])
