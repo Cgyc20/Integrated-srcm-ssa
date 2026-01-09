@@ -1,63 +1,72 @@
-name: predator_prey_lv
-title: "Predator–Prey (Lotka–Volterra)"
+name: predator_prey_edges_chase_k24
+title: "Predator–prey chase (K=24): predators at edges, prey in center"
 description: >
-  Spatial predator–prey dynamics with autocatalytic predation.
-  Exhibits oscillations and travelling fronts.
+  Spatial predator–prey system with second-order predation.
+  Initial condition: prey (A) in the middle, predators (B) at both edges.
 
-tags: [two-species, predator-prey, autocatalysis, second-order, demo]
+tags: [predator-prey, second-order, fronts, chase, edges, center]
 
-species: ["Prey", "Predator"]
+species: ["A", "B"]
 
 rates:
-  alpha: 1.0     # Prey birth
-  beta: 0.02     # Predation
-  mu: 0.8        # Predator death
+  alpha: 0.01
+  beta: 0.05
+  mu: 0.2
 
 diffusion:
-  Prey: 0.2
-  Predator: 0.05
+  A: 0.1
+  B: 0.05
 
 conversion:
-  threshold: 15
+  threshold: 50
   rate: 2.0
 
 reactions:
-  - reactants: {Prey: 1}
-    products:  {Prey: 2}
-    rate: alpha        # Prey reproduction
+  - reactants: {A: 1}
+    products:  {A: 2}
+    rate: alpha
 
-  - reactants: {Prey: 1, Predator: 1}
-    products:  {Predator: 2}
-    rate: beta         # Predation
+  - reactants: {A: 1, B: 1}
+    products:  {B: 2}
+    rate: beta
 
-  - reactants: {Predator: 1}
+  - reactants: {B: 1}
     products:  {}
-    rate: mu           # Predator death
+    rate: mu
 
 pde_model:
   name: mass_action_two_species
   terms:
-    dPrey: "alpha*Prey - beta*Prey*Predator"
-    dPredator: "beta*Prey*Predator - mu*Predator"
+    dA: "alpha*A - beta*A*B"
+    dB: "beta*A*B - mu*B"
 
 domain:
-  L: 20.0
-  K: 36
+  L: 10
+  K: 24
 
 time:
-  total_time: 80.0
-  dt: 0.01
+  total_time: 25.0
+  dt: 0.005
   repeats: 30
   pde_multiple: 8
 
 initial_conditions:
   type: two_patches
   patches:
-    - species: Prey
-      start: 0
+    - species: A
+      start: 9
       end: 15
-      value: 60
-    - species: Predator
-      start: 35
-      end: 50
-      value: 20
+      value: 80
+    - species: B
+      start: 0
+      end: 4
+      value: 30
+    - species: B
+      start: 20
+      end: 24
+      value: 30
+
+notes:
+  - "A = prey, B = predator."
+  - "Predators invade inward from both edges."
+  - "K reduced to 24; patch indices scaled accordingly."
