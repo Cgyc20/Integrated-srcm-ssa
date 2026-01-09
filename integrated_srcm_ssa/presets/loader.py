@@ -67,50 +67,75 @@ class PresetError(ValueError):
 PDEFunc = Callable[[np.ndarray, np.ndarray, Mapping[str, float]], Tuple[np.ndarray, np.ndarray]]
 
 
-def _pde_mass_action_from_terms(
-    dA_expr: str, dB_expr: str
-) -> PDEFunc:
+def _pde_mass_action_from_terms(dA_expr: str, dB_expr: str | None = None) -> Callable[..., np.ndarray]:
     """
-    Create a PDE drift callable from simple arithmetic expressions in A, B, and r[name].
+    Build a PDE reaction term function that is compatible with srcm-engine calling convention.
 
-    Safe-ish evaluator:
-    - We do NOT execute arbitrary code.
-    - We allow only numpy arrays A, B and scalar rates via mapping r.
-    - Implementation uses Python eval with a restricted namespace.
-      If you want maximum safety, replace this with an AST-based evaluator.
+    srcm-engine calls rhs_user(*species_arrays, rates)
+      - 1 species: rhs_user(A, rates)
+      - 2 species: rhs_user(A, B, rates)
+
+    We parse args so the last positional argument is rates.
+    Return shape must be (n_species, K).
     """
-    # Restricted namespace: no builtins, no access to globals
     allowed_builtins: Dict[str, Any] = {}
-    # Expose only A, B and rate names
-    def fn(A: np.ndarray, B: np.ndarray, r: Mapping[str, float]) -> Tuple[np.ndarray, np.ndarray]:
-        local_vars: Dict[str, Any] = {"A": A, "B": B}
-        # Add rates into local vars (alpha, beta, etc.)
-        local_vars.update(dict(r))
+
+    def fn(*args: Any) -> np.ndarray:
+        if len(args) < 2:
+            raise PresetError("PDE RHS must be called as rhs_user(*species_arrays, rates).")
+
+        r = args[-1]                 # rates mapping
+        Cs = args[:-1]               # species arrays
+
+        if not isinstance(r, Mapping):
+            raise PresetError(f"Last argument to PDE RHS must be rates mapping, got {type(r)}")
+
+        # Unpack species arrays
+        A = np.asarray(Cs[0])
+        local_vars: Dict[str, Any] = {"A": A}
+
+        if len(Cs) >= 2:
+            B = np.asarray(Cs[1])
+        else:
+            B = 0 * A  # dummy B so expressions like "0*A" work
+
+        local_vars["B"] = B
+        local_vars.update(dict(r))  # alpha, beta, gamma, ...
+
         try:
             dA = eval(dA_expr, {"__builtins__": allowed_builtins}, local_vars)
-            dB = eval(dB_expr, {"__builtins__": allowed_builtins}, local_vars)
+            dA = np.asarray(dA)
+
+            outs = [dA]
+
+            if len(Cs) >= 2:
+                if not isinstance(dB_expr, str):
+                    raise PresetError("Two-species PDE requires dB expression.")
+                dB = eval(dB_expr, {"__builtins__": allowed_builtins}, local_vars)
+                outs.append(np.asarray(dB))
+
         except Exception as e:
             raise PresetError(f"Failed evaluating PDE expressions: {e}") from e
-        return dA, dB
+
+        # (n_species, K)
+        return np.stack(outs, axis=0)
 
     return fn
 
 
-def pde_model_two_species_mass_action_from_preset(preset: Mapping[str, Any]) -> PDEFunc:
-    """
-    Default PDE model:
-    expects
-      preset["pde_model"]["terms"]["dA"], preset["pde_model"]["terms"]["dB"]
-    """
+
+
+def pde_model_two_species_mass_action_from_preset(preset: Mapping[str, Any]) -> Callable[..., np.ndarray]:
     pde = preset.get("pde_model") or {}
     terms = (pde.get("terms") or {})
     dA_expr = terms.get("dA")
     dB_expr = terms.get("dB")
-    if not isinstance(dA_expr, str) or not isinstance(dB_expr, str):
-        raise PresetError(
-            "pde_model.name=mass_action_two_species requires pde_model.terms.dA and pde_model.terms.dB strings."
-        )
-    return _pde_mass_action_from_terms(dA_expr, dB_expr)
+    if not isinstance(dA_expr, str):
+        raise PresetError("pde_model.terms.dA must be a string.")
+    # dB may be missing for 1-species, but required for 2-species runs
+    return _pde_mass_action_from_terms(dA_expr, dB_expr if isinstance(dB_expr, str) else None)
+
+
 
 
 # Registry: map model name -> builder
