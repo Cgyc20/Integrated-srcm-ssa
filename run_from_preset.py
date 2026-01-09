@@ -3,7 +3,7 @@ from integrated_srcm_ssa.presets import load_system
 from srcm_engine.results.io import save_npz
 
 # Load system from YAML
-sim, cfg = load_system("presets/pred_prey.yaml")
+sim, cfg = load_system("presets/species_annihilation.yaml")
 outdir = Path("results/my_experiment")
 outdir.mkdir(parents=True, exist_ok=True)
 # Run simulations
