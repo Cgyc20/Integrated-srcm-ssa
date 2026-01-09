@@ -13,7 +13,7 @@ tqdm = "*"
 pandas = "*"
 joblib = "*"
 
-srcm-engine = { git = "https://github.com/Cgyc20/srcm-engine.git", rev = "main" }
+srcm-engine = { git = "https://github.com/Cgyc20/srcm-engine.git", rev = "stable_1" }
 stochastic-framework = { git = "https://github.com/Cgyc20/stochastic_framework.git", rev = "main" }
 
 
