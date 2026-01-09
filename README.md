@@ -132,6 +132,35 @@ srcm-animate hybrid.npz ssa.npz --stride 10 --mass per_species --title "Reaction
 
 ---
 
+
+## 🔧 Preset systems (YAML)
+
+The Integrated SRCM–SSA package includes **predefined system presets** written in YAML.
+These presets describe complete reaction–diffusion systems (species, reactions, rates, PDE drift, domain, and initial conditions). user can inspect these files for context of the system. 
+
+We would advise only using these as reference The reason we have used YAML files is simply to save data, and so users can download many different systems of choice via the YAML. 
+
+We also advise that you write the python file from the template provided for any other system you wish to run. Presets can be loaded directly and executed without writing boilerplate setup code. 
+
+```python
+from integrated_srcm_ssa.presets import load_system
+
+sim, cfg = load_system("my_system.yaml")
+
+res_ssa, meta_ssa = sim.run_ssa(**cfg["ssa"])
+res_hybrid, meta_hybrid = sim.run_hybrid(**cfg["hybrid"])
+
+# Choose output directory + filenames
+outdir = Path("results/my_experiment")
+outdir.mkdir(parents=True, exist_ok=True)
+
+save_npz(res_ssa, outdir / "ssa_run.npz", meta=meta_ssa)
+save_npz(res_hybrid, outdir / "hybrid_run.npz", meta=meta_hybrid)
+
+
+```
+Users again can use the `srcm-inspect` and `srcm-animate` to inspect and animate results.
+
 ## 📚 Methodology
 
 This framework is based on the research by **Cameron et al. (2025)**.
