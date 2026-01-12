@@ -20,7 +20,7 @@ An integrated wrapper for the **Spatial Regime Change Method (SRCM)**, providing
 Install the complete suite directly from GitHub. All dependencies and engines are bundled automatically.
 
 ```bash
-pip install "git+https://github.com/Cgyc20/Integrated-srcm-ssa.git@v0.1.1"
+pip install "git+https://github.com/Cgyc20/Integrated-srcm-ssa.git@v0.1.2"
 ```
 
 > [!TIP]
