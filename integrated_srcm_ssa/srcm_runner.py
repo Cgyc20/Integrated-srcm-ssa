@@ -35,12 +35,15 @@ class SRCMRunner:
         threshold: particles per SSA compartment (>= 0)
         rate: conversion rate (>= 0)
         """
-        if threshold is not None:
-            thr = int(threshold)
-            if thr < 0:
-                raise ValueError("conversion threshold must be >= 0")
+        if not isinstance(threshold, dict):
+            if threshold is not None:
+                thr = int(threshold)
+                if thr < 0:
+                    raise ValueError("conversion threshold must be >= 0")
+                self.threshold = thr
+        else: 
+            thr = threshold 
             self.threshold = thr
-
         if rate is not None:
             cr = float(rate)
             if cr < 0:

@@ -96,6 +96,7 @@ def main():
     # 2. Extract threshold
     threshold_val = args.threshold if args.threshold is not None else meta.get("threshold_particles")
     
+    
     # 3. Print Information to terminal
     print_simulation_summary(res_main, meta, main_path.name)
 
