@@ -1,0 +1,89 @@
+name: fkpp_single_seed
+title: "FKPP front from single compartment seed"
+description: >
+  Single-species FKPP-type system with autocatalytic growth and saturation.
+  Initial condition: 5 particles in the first compartment only.
+
+reaction_network:
+  - "A -> 2A   (alpha)"
+  - "A -> ∅    (mu)"
+  - "2A -> A   (gamma)"
+
+species: ["A"]
+
+rates:
+  alpha: 1.0     # growth
+  mu: 0.0        # optional linear death
+  gamma: 0.02    # saturation / competition
+
+diffusion:
+  A: 0.2
+
+conversion:
+  threshold: 15
+  rate: 2.0
+
+reactions:
+  - reactants: {A: 1}
+    products:  {A: 2}
+    rate: alpha
+
+  - reactants: {A: 1}
+    products:  {}
+    rate: mu
+
+  - reactants: {A: 2}
+    products:  {A: 1}
+    rate: gamma
+
+
+pde_model:
+  name: mass_action_two_species
+  terms:
+    dA: "alpha*A - mu*A - gamma*A*A"
+    dB: "0*A"
+
+domain:
+  L: 20.0
+  K: 24
+
+time:
+  total_time: 20.0
+  dt: 0.005
+  repeats: 100
+
+initial_conditions:
+  type: explicit
+  arrays:
+    A:
+      - 5
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+
+      
+
+notes:
+  - "FKPP-type growth: autocatalysis with quadratic saturation."
+  - "Initial seed: 5 particles in compartment 0."
+  - "Expect a travelling wave/front propagating rightward."
