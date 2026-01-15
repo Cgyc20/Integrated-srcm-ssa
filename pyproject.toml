@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "integrated-srcm-ssa"
-version = "0.1.2"
+version = "1.0.1"
 description = ""
 authors = ["Cgyc20 <cgyc20@bath.ac.uk>"]
 readme = "README.md"
@@ -14,7 +14,7 @@ pandas = "*"
 joblib = "*"
 pyyaml = "*"
 
-srcm-engine = { git = "https://github.com/Cgyc20/srcm-engine.git", rev = "two_species_conv" }
+srcm-engine = { git = "https://github.com/Cgyc20/srcm-engine.git", rev = "v0.2.0" }
 stochastic-framework = { git = "https://github.com/Cgyc20/stochastic_framework.git", rev = "main" }
 
 

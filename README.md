@@ -20,7 +20,7 @@ An integrated wrapper for the **Spatial Regime Change Method (SRCM)**, providing
 Install the complete suite directly from GitHub. All dependencies and engines are bundled automatically.
 
 ```bash
-pip install "git+https://github.com/Cgyc20/Integrated-srcm-ssa.git@v0.1.2"
+pip install "git+https://github.com/Cgyc20/Integrated-srcm-ssa.git@v1.0.1"
 ```
 
 > [!TIP]
@@ -77,6 +77,11 @@ sim.set_pde_reactions(lambda A, B, r: (
 # Set the threshold (particles per compartment) for regime switching
 sim.define_conversion(threshold=10, rate=2.0)
 
+```
+We have added  a new feature in the recent release of the `SRCM-engine` and we can have two thresholds. We run this using this feature:
+
+```python
+sim.define_conversion(threshold={"A": 5, "B": 3}, rate=1.0)
 ```
 
 ### 3. Execution
