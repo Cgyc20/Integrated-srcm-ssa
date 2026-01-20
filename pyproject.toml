@@ -15,8 +15,8 @@ joblib = "*"
 pyyaml = "*"
 
 
-srcm-engine = { git = "https://github.com/Cgyc20/srcm-engine.git", branch = "main" }
-stochastic-framework = { git = "https://github.com/Cgyc20/stochastic_framework.git", branch = "main" }
+srcm-engine = { path = "/Users/charliecameron/CodingHub/PhD/Y2_code/srcm-engine", develop = true }
+stochastic-framework = { path = "/Users/charliecameron/CodingHub/PhD/Y2_code/stochastic_framework", develop = true }
 
 
 [build-system]
