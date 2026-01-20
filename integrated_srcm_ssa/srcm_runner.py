@@ -165,3 +165,89 @@ class SRCMRunner:
 
         print("✅ Hybrid Simulation Complete.")
         return res, meta
+
+
+
+    def run_hybrid_final_frames(
+        self,
+        L,
+        K,
+        pde_multiple,
+        total_time,
+        dt,
+        init_counts,
+        repeats=10,
+        seed=1,
+        parallel=True,
+        *,
+        save_path: str | None = None,
+        n_jobs: int = -1,
+        prefer: str = "processes",
+        progress: bool = True,
+    ):
+        """
+        Run SRCM Hybrid simulations and return ONLY the final frame from each repeat.
+
+        Returns
+        -------
+        final_ssa : np.ndarray
+            Shape (repeats, n_species, K), dtype int
+        final_pde : np.ndarray
+            Shape (repeats, n_species, Npde), dtype float
+        t_final : float
+            Final recorded time.
+
+        If save_path is provided, a compressed .npz is written containing:
+            final_ssa, final_pde, t_final, species
+        """
+        print(f"→ Starting SRCM Hybrid Simulation (final frames, {repeats} repeats)...")
+
+        # Domain + diffusion + conversion configuration happens here
+        self.hybrid_model.domain(L=L, K=K, pde_multiple=pde_multiple, boundary="zero-flux")
+        self.hybrid_model.diffusion(**self.diff_coeffs)
+        self.hybrid_model.conversion(threshold=self.threshold, rate=self.conv_rate)
+        self.hybrid_model.build(rates=self.rates)
+
+        init_ssa = np.zeros((len(self.species), K), dtype=int)
+        for spec, arr in init_counts.items():
+            init_ssa[self.species_map[spec]] = arr
+
+        init_pde = np.zeros((len(self.species), K * pde_multiple), dtype=float)
+
+        final_ssa, final_pde, t_final = self.hybrid_model.run_repeats_final(
+            init_ssa,
+            init_pde,
+            time=total_time,
+            dt=dt,
+            repeats=repeats,
+            seed=seed,
+            parallel=parallel,
+            n_jobs=n_jobs,
+            prefer=prefer,
+            progress=progress,
+            save_path=save_path,
+        )
+
+        meta = {
+            "run_type": "hybrid_final_frames",
+            "species": self.species,
+            "threshold_particles": self.threshold,
+            "conversion_rate": self.conv_rate,
+            "diffusion_rates": dict(self.diff_coeffs),
+            "reaction_rates": dict(self.rates),
+            "total_time": float(total_time),
+            "dt": float(dt),
+            "repeats": int(repeats),
+            "seed": int(seed),
+            "reactions": [
+                {"reactants": r, "products": p, "rate_name": name, "rate": self.rates.get(name)}
+                for r, p, name in self.reactions
+            ],
+            "domain": {"L": L, "K": K, "pde_multiple": pde_multiple, "boundary": "zero-flux"},
+            "t_final": float(t_final),
+            "saved_path": save_path,
+        }
+
+        print("✅ Hybrid Final-Frames Ensemble Complete.")
+        return (final_ssa, final_pde, t_final), meta
+    
