@@ -14,7 +14,7 @@ pandas = "*"
 joblib = "*"
 pyyaml = "*"
 
-srcm-engine = { git = "https://github.com/Cgyc20/srcm-engine.git", rev = "v0.2.0" }
+srcm-engine = { git = "https://github.com/Cgyc20/srcm-engine.git", rev = "main" }
 stochastic-framework = { git = "https://github.com/Cgyc20/stochastic_framework.git", rev = "main" }
 
 
