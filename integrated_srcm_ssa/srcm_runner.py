@@ -251,3 +251,67 @@ class SRCMRunner:
         print("✅ Hybrid Final-Frames Ensemble Complete.")
         return (final_ssa, final_pde, t_final), meta
     
+
+    def run_ssa_final_frames(self, L, K, total_time, dt, init_counts, n_repeats=10, *, save_path: str | None = None):
+        """
+        Run multiple pure SSA simulations and return ONLY the final frame from each repeat.
+
+        Returns
+        -------
+        final_ssa : np.ndarray
+            Shape (n_repeats, n_species, K), dtype int
+        t_final : float
+            Final recorded time.
+
+        If save_path is provided and the SSA engine supports it, saves a compressed .npz.
+        """
+        print(f"→ Starting Pure SSA Simulation (final frames, {n_repeats} repeats)...")
+
+        rxn = Reaction()
+        for r, p, name in self.reactions:
+            rxn.add_reaction(r, p, self.rates[name])
+
+        ic = np.zeros((len(self.species), K), dtype=int)
+        for spec, arr in init_counts.items():
+            ic[self.species_map[spec]] = arr
+
+        ssa_engine = SSA(rxn)
+        ssa_engine.set_conditions(
+            n_compartments=K,
+            domain_length=L,
+            total_time=total_time,
+            initial_conditions=ic,
+            timestep=dt,
+            Macroscopic_diffusion_rates=[self.diff_coeffs[s] for s in self.species],
+            boundary_conditions="zero-flux",
+        )
+
+        # Requires SSA.run_final_frames(...) to exist (new method you added)
+        final_ssa = ssa_engine.run_final_frames(n_repeats=n_repeats, progress=True)
+        t_final = float(ssa_engine.timevector[-1]) if len(ssa_engine.timevector) else float(total_time)
+
+        # Optional save (if you added SSA.save_final_frames)
+        if save_path is not None:
+            if hasattr(ssa_engine, "save_final_frames"):
+                ssa_engine.save_final_frames(save_path, final_ssa)
+            else:
+                # Minimal fallback save so this wrapper still works even without SSA.save_final_frames
+                np.savez_compressed(
+                    save_path,
+                    final_ssa=final_ssa,
+                    t_final=t_final,
+                    species=np.array(self.species, dtype=object),
+                    domain_length=float(L),
+                    K=int(K),
+                    total_time=float(total_time),
+                    dt=float(dt),
+                )
+
+        meta = self._get_shared_meta(L, K, total_time, dt, n_repeats)
+        meta["run_type"] = "pure_ssa_final_frames"
+        meta["t_final"] = t_final
+        meta["saved_path"] = save_path
+
+        print("✅ SSA Final-Frames Ensemble Complete.")
+        return (final_ssa, t_final), meta
+    
