@@ -5,8 +5,22 @@ from srcm_engine.core import HybridModel
 from srcm_engine.results.simulation_results import SimulationResults
 
 
+def _validate_boundary(boundary: str) -> str:
+    boundary = str(boundary)
+    if boundary not in ("zero-flux", "periodic"):
+        raise ValueError("boundary must be 'zero-flux' or 'periodic'")
+    return boundary
+
+
 class SRCMRunner:
-    def __init__(self, species: list[str], *, threshold: int = 4, conv_rate: float = 1.0):
+    def __init__(
+        self,
+        species: list[str],
+        *,
+        threshold: int = 4,
+        conv_rate: float = 1.0,
+        boundary: str = "zero-flux",
+    ):
         self.species = species
         self.species_map = {s: i for i, s in enumerate(species)}
         self.reactions = []  # (reactants, products, rate_name)
@@ -20,6 +34,9 @@ class SRCMRunner:
         self.threshold = int(threshold)
         self.conv_rate = float(conv_rate)
 
+        # Boundary default for both SSA + Hybrid
+        self.boundary = _validate_boundary(boundary)
+
     # -------------------------
     # Setup / definition methods
     # -------------------------
@@ -29,10 +46,14 @@ class SRCMRunner:
     def define_diffusion(self, **kwargs):
         self.diff_coeffs.update(kwargs)
 
+    def define_boundary(self, boundary: str):
+        """Set the default boundary used by run_ssa/run_hybrid unless overridden."""
+        self.boundary = _validate_boundary(boundary)
+
     def define_conversion(self, *, threshold: int | None = None, rate: float | None = None):
         """
         Define SSA <-> PDE conversion settings for hybrid runs.
-        threshold: particles per SSA compartment (>= 0)
+        threshold: particles per SSA compartment (>= 0) OR dict per species
         rate: conversion rate (>= 0)
         """
         if not isinstance(threshold, dict):
@@ -41,9 +62,9 @@ class SRCMRunner:
                 if thr < 0:
                     raise ValueError("conversion threshold must be >= 0")
                 self.threshold = thr
-        else: 
-            thr = threshold 
-            self.threshold = thr
+        else:
+            self.threshold = threshold
+
         if rate is not None:
             cr = float(rate)
             if cr < 0:
@@ -61,12 +82,13 @@ class SRCMRunner:
     # -------------------------
     # Metadata helper
     # -------------------------
-    def _get_shared_meta(self, L, K, total_time, dt, repeats):
+    def _get_shared_meta(self, L, K, total_time, dt, repeats, boundary: str):
         return {
             "species": self.species,
             "total_time": float(total_time),
             "dt": float(dt),
             "repeats": int(repeats),
+            "boundary": boundary,
             "diffusion_rates": dict(self.diff_coeffs),
             "reaction_rates": dict(self.rates),
             "reactions": [
@@ -78,14 +100,15 @@ class SRCMRunner:
                 }
                 for r, p, name in self.reactions
             ],
-            "domain": {"length": L, "K": K, "boundary": "zero-flux"},
+            "domain": {"length": L, "K": K, "boundary": boundary},
         }
 
     # -------------------------
     # Runners
     # -------------------------
-    def run_ssa(self, L, K, total_time, dt, init_counts, n_repeats=10):
-        print(f"→ Starting Pure SSA Simulation ({n_repeats} repeats)...")
+    def run_ssa(self, L, K, total_time, dt, init_counts, n_repeats=10, *, boundary: str | None = None):
+        boundary = _validate_boundary(boundary or self.boundary)
+        print(f"→ Starting Pure SSA Simulation ({n_repeats} repeats, boundary={boundary})...")
 
         rxn = Reaction()
         for r, p, name in self.reactions:
@@ -98,55 +121,56 @@ class SRCMRunner:
         ssa_engine = SSA(rxn)
         ssa_engine.set_conditions(
             n_compartments=K,
-            domain_length=L,
-            total_time=total_time,
+            domain_length=float(L),
+            total_time=float(total_time),
             initial_conditions=ic,
-            timestep=dt,
-            Macroscopic_diffusion_rates=[self.diff_coeffs[s] for s in self.species],
-            boundary_conditions="zero-flux",
+            timestep=float(dt),
+            Macroscopic_diffusion_rates=[float(self.diff_coeffs[s]) for s in self.species],
+            boundary_conditions=boundary,
         )
 
-        avg_out = ssa_engine.run_simulation(n_repeats=n_repeats)
+        avg_out = ssa_engine.run_simulation(n_repeats=int(n_repeats))
         time = np.asarray(ssa_engine.timevector)
         ssa_data = np.transpose(avg_out, (1, 2, 0))
 
-        domain = Domain(length=L, n_ssa=K, pde_multiple=1, boundary="zero-flux")
-        pde_data = np.zeros((len(self.species), K, len(time)))
+        domain = Domain(length=float(L), n_ssa=int(K), pde_multiple=1, boundary=boundary)
+        pde_data = np.zeros((len(self.species), int(K), len(time)))
 
         res = SimulationResults(time=time, ssa=ssa_data, pde=pde_data, domain=domain, species=self.species)
 
-        meta = self._get_shared_meta(L, K, total_time, dt, n_repeats)
-        meta["run_type"] = "pure_ssa"
+        meta = self._get_shared_meta(L, K, total_time, dt, n_repeats, boundary)
+        meta["run_type"] = "pure_ssa_mean"
 
         print("✅ SSA Simulation Complete.")
         return res, meta
 
-    def run_hybrid(self, L, K, pde_multiple, total_time, dt, init_counts, repeats=10, seed=1, parallel=True):
-        print(f"→ Starting SRCM Hybrid Simulation ({repeats} repeats)...")
+    def run_hybrid(self, L, K, pde_multiple, total_time, dt, init_counts, repeats=10, seed=1, parallel=True, *, boundary: str | None = None):
+        boundary = _validate_boundary(boundary or self.boundary)
+        print(f"→ Starting SRCM Hybrid Simulation ({repeats} repeats, boundary={boundary})...")
 
-        # Domain + diffusion + conversion configuration happens here
-        self.hybrid_model.domain(L=L, K=K, pde_multiple=pde_multiple, boundary="zero-flux")
+        self.hybrid_model.domain(L=float(L), K=int(K), pde_multiple=int(pde_multiple), boundary=boundary)
         self.hybrid_model.diffusion(**self.diff_coeffs)
         self.hybrid_model.conversion(threshold=self.threshold, rate=self.conv_rate)
         self.hybrid_model.build(rates=self.rates)
 
-        init_ssa = np.zeros((len(self.species), K), dtype=int)
+        init_ssa = np.zeros((len(self.species), int(K)), dtype=int)
         for spec, arr in init_counts.items():
             init_ssa[self.species_map[spec]] = arr
 
-        init_pde = np.zeros((len(self.species), K * pde_multiple), dtype=float)
+        init_pde = np.zeros((len(self.species), int(K) * int(pde_multiple)), dtype=float)
 
         res = self.hybrid_model.run_repeats(
             init_ssa,
             init_pde,
-            time=total_time,
-            dt=dt,
-            repeats=repeats,
-            seed=seed,
-            parallel=parallel,
+            time=float(total_time),
+            dt=float(dt),
+            repeats=int(repeats),
+            seed=int(seed),
+            parallel=bool(parallel),
         )
 
         meta = {
+            "run_type": "hybrid_mean",
             "species": self.species,
             "threshold_particles": self.threshold,
             "conversion_rate": self.conv_rate,
@@ -156,17 +180,98 @@ class SRCMRunner:
             "dt": float(dt),
             "repeats": int(repeats),
             "seed": int(seed),
+            "boundary": boundary,
+            "domain": {"L": float(L), "K": int(K), "pde_multiple": int(pde_multiple), "boundary": boundary},
             "reactions": [
                 {"reactants": r, "products": p, "rate_name": name, "rate": self.rates.get(name)}
                 for r, p, name in self.reactions
             ],
-            "domain": {"L": L, "K": K, "pde_multiple": pde_multiple, "boundary": "zero-flux"},
         }
 
         print("✅ Hybrid Simulation Complete.")
         return res, meta
 
+    # -------------------------
+    # FINAL FRAMES
+    # -------------------------
+    def run_ssa_final_frames(
+        self,
+        L,
+        K,
+        total_time,
+        dt,
+        init_counts,
+        n_repeats=10,
+        *,
+        boundary: str | None = None,
+        seed: int | None = None,
+        progress: bool = True,
+        save_path: str | None = None,
+    ):
+        """
+        Returns
+        -------
+        final_ssa : (repeats, n_species, K) int
+        t_final : float
+        """
+        boundary = _validate_boundary(boundary or self.boundary)
+        print(f"→ Starting Pure SSA Final Frames ({n_repeats} repeats, boundary={boundary})...")
 
+        rxn = Reaction()
+        for r, p, name in self.reactions:
+            rxn.add_reaction(r, p, self.rates[name])
+
+        ic = np.zeros((len(self.species), int(K)), dtype=int)
+        for spec, arr in init_counts.items():
+            ic[self.species_map[spec]] = arr
+
+        ssa_engine = SSA(rxn)
+        ssa_engine.set_conditions(
+            n_compartments=int(K),
+            domain_length=float(L),
+            total_time=float(total_time),
+            initial_conditions=ic,
+            timestep=float(dt),
+            Macroscopic_diffusion_rates=[float(self.diff_coeffs[s]) for s in self.species],
+            boundary_conditions=boundary,
+        )
+
+        # Run repeats, keep only final frame
+        R = int(n_repeats)
+        final_ssa = np.zeros((R, len(self.species), int(K)), dtype=int)
+
+        if seed is not None:
+            np.random.seed(int(seed))
+
+        iterator = range(R)
+        if progress:
+            try:
+                from tqdm.auto import tqdm
+                iterator = tqdm(iterator, total=R, desc="SSA final frames", unit="run", dynamic_ncols=True)
+            except Exception:
+                pass
+
+        for r in iterator:
+            ssa_engine._generate_dataframes()
+            tensor = ssa_engine._SSA_loop()          # shape (T, S, K)
+            final_ssa[r, :, :] = tensor[-1, :, :]    # final frame
+
+        t_final = float(ssa_engine.timevector[-1])
+
+        meta = self._get_shared_meta(L, K, total_time, dt, n_repeats, boundary)
+        meta["run_type"] = "pure_ssa_final_frames"
+
+        if save_path is not None:
+            np.savez_compressed(
+                save_path,
+                final_ssa=final_ssa,
+                t_final=t_final,
+                species=np.array(self.species, dtype=object),
+                meta=meta,
+            )
+
+        print("✅ SSA Final Frames Complete.")
+        return (final_ssa, t_final), meta
 
     def run_hybrid_final_frames(
         self,
@@ -180,51 +285,40 @@ class SRCMRunner:
         seed=1,
         parallel=True,
         *,
+        boundary: str | None = None,
         save_path: str | None = None,
         n_jobs: int = -1,
         prefer: str = "processes",
         progress: bool = True,
     ):
         """
-        Run SRCM Hybrid simulations and return ONLY the final frame from each repeat.
-
-        Returns
-        -------
-        final_ssa : np.ndarray
-            Shape (repeats, n_species, K), dtype int
-        final_pde : np.ndarray
-            Shape (repeats, n_species, Npde), dtype float
-        t_final : float
-            Final recorded time.
-
-        If save_path is provided, a compressed .npz is written containing:
-            final_ssa, final_pde, t_final, species
+        Requires HybridModel.run_repeats_final(...) to exist.
         """
-        print(f"→ Starting SRCM Hybrid Simulation (final frames, {repeats} repeats)...")
+        boundary = _validate_boundary(boundary or self.boundary)
+        print(f"→ Starting SRCM Hybrid Final Frames ({repeats} repeats, boundary={boundary})...")
 
-        # Domain + diffusion + conversion configuration happens here
-        self.hybrid_model.domain(L=L, K=K, pde_multiple=pde_multiple, boundary="zero-flux")
+        self.hybrid_model.domain(L=float(L), K=int(K), pde_multiple=int(pde_multiple), boundary=boundary)
         self.hybrid_model.diffusion(**self.diff_coeffs)
         self.hybrid_model.conversion(threshold=self.threshold, rate=self.conv_rate)
         self.hybrid_model.build(rates=self.rates)
 
-        init_ssa = np.zeros((len(self.species), K), dtype=int)
+        init_ssa = np.zeros((len(self.species), int(K)), dtype=int)
         for spec, arr in init_counts.items():
             init_ssa[self.species_map[spec]] = arr
 
-        init_pde = np.zeros((len(self.species), K * pde_multiple), dtype=float)
+        init_pde = np.zeros((len(self.species), int(K) * int(pde_multiple)), dtype=float)
 
         final_ssa, final_pde, t_final = self.hybrid_model.run_repeats_final(
             init_ssa,
             init_pde,
-            time=total_time,
-            dt=dt,
-            repeats=repeats,
-            seed=seed,
-            parallel=parallel,
-            n_jobs=n_jobs,
-            prefer=prefer,
-            progress=progress,
+            time=float(total_time),
+            dt=float(dt),
+            repeats=int(repeats),
+            seed=int(seed),
+            parallel=bool(parallel),
+            n_jobs=int(n_jobs),
+            prefer=str(prefer),
+            progress=bool(progress),
             save_path=save_path,
         )
 
@@ -239,79 +333,15 @@ class SRCMRunner:
             "dt": float(dt),
             "repeats": int(repeats),
             "seed": int(seed),
+            "boundary": boundary,
+            "domain": {"L": float(L), "K": int(K), "pde_multiple": int(pde_multiple), "boundary": boundary},
             "reactions": [
                 {"reactants": r, "products": p, "rate_name": name, "rate": self.rates.get(name)}
                 for r, p, name in self.reactions
             ],
-            "domain": {"L": L, "K": K, "pde_multiple": pde_multiple, "boundary": "zero-flux"},
             "t_final": float(t_final),
             "saved_path": save_path,
         }
 
-        print("✅ Hybrid Final-Frames Ensemble Complete.")
+        print("✅ Hybrid Final Frames Complete.")
         return (final_ssa, final_pde, t_final), meta
-    
-
-    def run_ssa_final_frames(self, L, K, total_time, dt, init_counts, n_repeats=10, *, save_path: str | None = None):
-        """
-        Run multiple pure SSA simulations and return ONLY the final frame from each repeat.
-
-        Returns
-        -------
-        final_ssa : np.ndarray
-            Shape (n_repeats, n_species, K), dtype int
-        t_final : float
-            Final recorded time.
-
-        If save_path is provided and the SSA engine supports it, saves a compressed .npz.
-        """
-        print(f"→ Starting Pure SSA Simulation (final frames, {n_repeats} repeats)...")
-
-        rxn = Reaction()
-        for r, p, name in self.reactions:
-            rxn.add_reaction(r, p, self.rates[name])
-
-        ic = np.zeros((len(self.species), K), dtype=int)
-        for spec, arr in init_counts.items():
-            ic[self.species_map[spec]] = arr
-
-        ssa_engine = SSA(rxn)
-        ssa_engine.set_conditions(
-            n_compartments=K,
-            domain_length=L,
-            total_time=total_time,
-            initial_conditions=ic,
-            timestep=dt,
-            Macroscopic_diffusion_rates=[self.diff_coeffs[s] for s in self.species],
-            boundary_conditions="zero-flux",
-        )
-
-        # Requires SSA.run_final_frames(...) to exist (new method you added)
-        final_ssa = ssa_engine.run_final_frames(n_repeats=n_repeats, progress=True)
-        t_final = float(ssa_engine.timevector[-1]) if len(ssa_engine.timevector) else float(total_time)
-
-        # Optional save (if you added SSA.save_final_frames)
-        if save_path is not None:
-            if hasattr(ssa_engine, "save_final_frames"):
-                ssa_engine.save_final_frames(save_path, final_ssa)
-            else:
-                # Minimal fallback save so this wrapper still works even without SSA.save_final_frames
-                np.savez_compressed(
-                    save_path,
-                    final_ssa=final_ssa,
-                    t_final=t_final,
-                    species=np.array(self.species, dtype=object),
-                    domain_length=float(L),
-                    K=int(K),
-                    total_time=float(total_time),
-                    dt=float(dt),
-                )
-
-        meta = self._get_shared_meta(L, K, total_time, dt, n_repeats)
-        meta["run_type"] = "pure_ssa_final_frames"
-        meta["t_final"] = t_final
-        meta["saved_path"] = save_path
-
-        print("✅ SSA Final-Frames Ensemble Complete.")
-        return (final_ssa, t_final), meta
-    
