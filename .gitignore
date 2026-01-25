@@ -2,3 +2,4 @@ data/
 *.npz
 data/hybrid_results.npz
 data/ssa_results.npz
+integrated_srcm_ssa/__pycache__/srcm_runner.cpython-312.pyc
