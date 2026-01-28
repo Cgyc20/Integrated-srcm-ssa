@@ -106,7 +106,22 @@ class SRCMRunner:
     # -------------------------
     # Runners
     # -------------------------
-    def run_ssa(self, L, K, total_time, dt, init_counts, n_repeats=10, *, boundary: str | None = None):
+    def run_ssa(
+                self,
+                L,
+                K,
+                total_time,
+                dt,
+                init_counts,
+                n_repeats=10,
+                *,
+                boundary: str | None = None,
+                parallel: bool = False,
+                n_jobs: int = -1,
+                max_n_jobs: int | None = None,
+                base_seed: int | None = None,
+            ):
+
         boundary = _validate_boundary(boundary or self.boundary)
         print(f"→ Starting Pure SSA Simulation ({n_repeats} repeats, boundary={boundary})...")
 
@@ -129,7 +144,17 @@ class SRCMRunner:
             boundary_conditions=boundary,
         )
 
-        avg_out = ssa_engine.run_simulation(n_repeats=int(n_repeats))
+        # avg_out = ssa_engine.run_simulation(n_repeats=int(n_repeats))
+        avg_out = ssa_engine.run_simulation(
+                                            n_repeats=int(n_repeats),
+                                            parallel=bool(parallel),
+                                            n_jobs=int(n_jobs) if n_jobs is not None else -1,
+                                            max_n_jobs=max_n_jobs,
+                                            base_seed=base_seed,
+                                            )
+
+
+
         time = np.asarray(ssa_engine.timevector)
         ssa_data = np.transpose(avg_out, (1, 2, 0))
 
@@ -195,19 +220,22 @@ class SRCMRunner:
     # FINAL FRAMES
     # -------------------------
     def run_ssa_final_frames(
-        self,
-        L,
-        K,
-        total_time,
-        dt,
-        init_counts,
-        n_repeats=10,
-        *,
-        boundary: str | None = None,
-        seed: int | None = None,
-        progress: bool = True,
-        save_path: str | None = None,
-    ):
+    self,
+    L,
+    K,
+    total_time,
+    dt,
+    init_counts,
+    n_repeats=10,
+    *,
+    boundary: str | None = None,
+    seed: int | None = None,
+    progress: bool = True,
+    save_path: str | None = None,
+    parallel: bool = False,
+    n_jobs: int = -1,
+    max_n_jobs: int | None = None,
+):
         """
         Returns
         -------
@@ -236,30 +264,28 @@ class SRCMRunner:
             boundary_conditions=boundary,
         )
 
-        # Run repeats, keep only final frame
         R = int(n_repeats)
-        final_ssa = np.zeros((R, len(self.species), int(K)), dtype=int)
 
-        if seed is not None:
-            np.random.seed(int(seed))
+        # Use seed as a base_seed so repeat i uses seed+i (reproducible + parallel-safe)
+        base_seed = int(seed) if seed is not None else None
 
-        iterator = range(R)
-        if progress:
-            try:
-                from tqdm.auto import tqdm
-                iterator = tqdm(iterator, total=R, desc="SSA final frames", unit="run", dynamic_ncols=True)
-            except Exception:
-                pass
-
-        for r in iterator:
-            ssa_engine._generate_dataframes()
-            tensor = ssa_engine._SSA_loop()          # shape (T, S, K)
-            final_ssa[r, :, :] = tensor[-1, :, :]    # final frame
+        final_ssa = ssa_engine.run_final_frames(
+            n_repeats=R,
+            progress=bool(progress),
+            parallel=bool(parallel),
+            n_jobs=int(n_jobs),
+            max_n_jobs=max_n_jobs,
+            base_seed=base_seed,
+        )
 
         t_final = float(ssa_engine.timevector[-1])
 
         meta = self._get_shared_meta(L, K, total_time, dt, n_repeats, boundary)
         meta["run_type"] = "pure_ssa_final_frames"
+        meta["parallel"] = bool(parallel)
+        meta["n_jobs"] = int(n_jobs)
+        meta["max_n_jobs"] = None if max_n_jobs is None else int(max_n_jobs)
+        meta["seed"] = None if seed is None else int(seed)
 
         if save_path is not None:
             np.savez_compressed(
@@ -272,6 +298,8 @@ class SRCMRunner:
 
         print("✅ SSA Final Frames Complete.")
         return (final_ssa, t_final), meta
+
+
 
     def run_hybrid_final_frames(
         self,
