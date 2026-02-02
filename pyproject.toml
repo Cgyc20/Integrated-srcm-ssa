@@ -6,7 +6,7 @@ authors = ["Cgyc20 <cgyc20@bath.ac.uk>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.12,<3.15"
+python = ">=3.11,<3.15"
 numpy = "*"
 matplotlib = "*"
 tqdm = "*"
@@ -15,8 +15,8 @@ joblib = "*"
 pyyaml = "*"
 
 
-stochastic-framework = {git = "https://github.com/Cgyc20/stochastic_framework.git", tag = "v0.2.1"}
-srcm-engine = {git = "https://github.com/Cgyc20/srcm-engine.git", tag ="v0.2.2" } 
+stochastic-framework = {git = "https://github.com/Cgyc20/stochastic_framework.git", tag = "v0.2.2"}
+srcm-engine = {git = "https://github.com/Cgyc20/srcm-engine.git", tag ="v0.2.3" } 
 
 [build-system]
 requires = ["poetry-core"]
