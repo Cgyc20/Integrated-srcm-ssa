@@ -439,3 +439,78 @@ class SRCMRunner:
 
         print("✅ Hybrid Final Frames Complete.")
         return (final_ssa, final_pde, t_final), meta
+
+
+
+    def run_ssa_trajectories(
+                            self,
+                            L,
+                            K,
+                            total_time,
+                            dt,
+                            init_counts,
+                            n_repeats=10,
+                            *,
+                            boundary: str | None = None,
+                            parallel: bool = False,
+                            n_jobs: int = -1,
+                            max_n_jobs: int | None = None,
+                            base_seed: int | None = None,
+                            ):
+        
+        boundary = _validate_boundary(boundary or self.boundary)
+        print(f"→ Starting Pure SSA Trajectory Simulation ({n_repeats} repeats, boundary={boundary})...")
+
+        rxn = Reaction()
+        for r, p, name in self.reactions:
+            rxn.add_reaction(r, p, self.rates[name])
+
+        ic = np.zeros((len(self.species), int(K)), dtype=int)
+        for spec, arr in init_counts.items():
+            ic[self.species_map[spec]] = arr
+
+        ssa_engine = SSA(rxn)
+        ssa_engine.set_conditions(
+            n_compartments=int(K),
+            domain_length=float(L),
+            total_time=float(total_time),
+            initial_conditions=ic,
+            timestep=float(dt),
+            Macroscopic_diffusion_rates=[float(self.diff_coeffs[s]) for s in self.species],
+            boundary_conditions=boundary,
+        )
+
+        # NEW: get all trajectories: shape (R, T, S, K)
+        traj = ssa_engine.run_trajectories(
+            n_repeats=int(n_repeats),
+            parallel=bool(parallel),
+            n_jobs=int(n_jobs) if n_jobs is not None else -1,
+            max_n_jobs=max_n_jobs,
+            base_seed=base_seed,
+            progress=True,
+        )
+
+        time = np.asarray(ssa_engine.timevector)
+
+        # Convert to whatever SimulationResults expects.
+        # Your mean runner does: avg_out (T,S,K) -> transpose to (S,K,T).
+        # Here: (R,T,S,K) -> (R,S,K,T)
+        ssa_data = np.transpose(traj, (0, 2, 3, 1)).astype(float, copy=False)
+
+        domain = Domain(length=float(L), n_ssa=int(K), pde_multiple=1, boundary=boundary)
+
+        # No PDE in pure SSA
+        # Match dims: (R, S, K, T)
+        pde_data = np.zeros_like(ssa_data, dtype=float)
+
+        res = SimulationResults(time=time, ssa=ssa_data, pde=pde_data, domain=domain, species=self.species)
+
+        meta = self._get_shared_meta(L, K, total_time, dt, n_repeats, boundary)
+        meta["run_type"] = "pure_ssa_trajectories"
+        meta["parallel"] = bool(parallel)
+        meta["n_jobs"] = int(n_jobs) if n_jobs is not None else -1
+        meta["max_n_jobs"] = None if max_n_jobs is None else int(max_n_jobs)
+        meta["base_seed"] = None if base_seed is None else int(base_seed)
+
+        print("✅ SSA Trajectory Simulation Complete.")
+        return res, meta
