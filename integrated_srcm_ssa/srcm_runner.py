@@ -215,6 +215,72 @@ class SRCMRunner:
 
         print("✅ Hybrid Simulation Complete.")
         return res, meta
+    
+    def run_hybrid_trajectories(
+                                self,
+                                L,
+                                K,
+                                pde_multiple,
+                                total_time,
+                                dt,
+                                init_counts,
+                                repeats=10,
+                                seed=1,
+                                parallel=True,
+                                *,
+                                boundary: str | None = None,
+                            ):
+        boundary = _validate_boundary(boundary or self.boundary)
+        print(f"→ Starting SRCM Hybrid Trajectory Simulation ({repeats} repeats, boundary={boundary})...")
+
+        # --- build model exactly the same way ---
+        self.hybrid_model.domain(L=float(L), K=int(K), pde_multiple=int(pde_multiple), boundary=boundary)
+        self.hybrid_model.diffusion(**self.diff_coeffs)
+        self.hybrid_model.conversion(threshold=self.threshold, rate=self.conv_rate)
+        self.hybrid_model.build(rates=self.rates)
+
+        # --- initial conditions ---
+        init_ssa = np.zeros((len(self.species), int(K)), dtype=int)
+        for spec, arr in init_counts.items():
+            init_ssa[self.species_map[spec]] = arr
+
+        init_pde = np.zeros((len(self.species), int(K) * int(pde_multiple)), dtype=float)
+
+        # --- THIS is the key change ---
+        # Requires you added hybrid_model.run_trajectories(...) in user_api.py,
+        # and engine.run_trajectories(...) in the engine.
+        res = self.hybrid_model.run_trajectories(
+            init_ssa,
+            init_pde,
+            time=float(total_time),
+            dt=float(dt),
+            repeats=int(repeats),
+            seed=int(seed),
+            parallel=bool(parallel),
+        )
+
+        meta = {
+            "run_type": "hybrid_trajectories",
+            "species": self.species,
+            "threshold_particles": self.threshold,
+            "conversion_rate": self.conv_rate,
+            "diffusion_rates": dict(self.diff_coeffs),
+            "reaction_rates": dict(self.rates),
+            "total_time": float(total_time),
+            "dt": float(dt),
+            "repeats": int(repeats),
+            "seed": int(seed),
+            "boundary": boundary,
+            "domain": {"L": float(L), "K": int(K), "pde_multiple": int(pde_multiple), "boundary": boundary},
+            "reactions": [
+                {"reactants": r, "products": p, "rate_name": name, "rate": self.rates.get(name)}
+                for r, p, name in self.reactions
+            ],
+        }
+
+        print("✅ Hybrid Trajectory Simulation Complete.")
+        return res, meta
+
 
     # -------------------------
     # FINAL FRAMES
