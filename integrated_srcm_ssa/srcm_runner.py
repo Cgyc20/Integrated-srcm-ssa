@@ -217,19 +217,20 @@ class SRCMRunner:
         return res, meta
     
     def run_hybrid_trajectories(
-                                self,
-                                L,
-                                K,
-                                pde_multiple,
-                                total_time,
-                                dt,
-                                init_counts,
-                                repeats=10,
-                                seed=1,
-                                parallel=True,
-                                *,
-                                boundary: str | None = None,
-                            ):
+        self,
+        L,
+        K,
+        pde_multiple,
+        total_time,
+        dt,
+        init_counts,
+        repeats=10,
+        seed=1,
+        parallel=True,
+        *,
+        boundary: str | None = None,
+        time_stride: int = 1,   # <-- NEW: keep every Nth timestep
+    ):
         boundary = _validate_boundary(boundary or self.boundary)
         print(f"→ Starting SRCM Hybrid Trajectory Simulation ({repeats} repeats, boundary={boundary})...")
 
@@ -246,9 +247,7 @@ class SRCMRunner:
 
         init_pde = np.zeros((len(self.species), int(K) * int(pde_multiple)), dtype=float)
 
-        # --- THIS is the key change ---
-        # Requires you added hybrid_model.run_trajectories(...) in user_api.py,
-        # and engine.run_trajectories(...) in the engine.
+        # --- run trajectories ---
         res = self.hybrid_model.run_trajectories(
             init_ssa,
             init_pde,
@@ -258,6 +257,13 @@ class SRCMRunner:
             seed=int(seed),
             parallel=bool(parallel),
         )
+
+        # --- subsample time + data (assumes SimulationResults-style: time is (T,), ssa/pde have time LAST axis) ---
+        time_stride = int(time_stride)
+        if time_stride > 1:
+            res.time = res.time[::time_stride]
+            res.ssa = res.ssa[..., ::time_stride]
+            res.pde = res.pde[..., ::time_stride]
 
         meta = {
             "run_type": "hybrid_trajectories",
@@ -271,6 +277,7 @@ class SRCMRunner:
             "repeats": int(repeats),
             "seed": int(seed),
             "boundary": boundary,
+            "time_stride": int(time_stride),  # <-- NEW
             "domain": {"L": float(L), "K": int(K), "pde_multiple": int(pde_multiple), "boundary": boundary},
             "reactions": [
                 {"reactants": r, "products": p, "rate_name": name, "rate": self.rates.get(name)}
@@ -280,6 +287,7 @@ class SRCMRunner:
 
         print("✅ Hybrid Trajectory Simulation Complete.")
         return res, meta
+
 
 
     # -------------------------
@@ -456,8 +464,8 @@ class SRCMRunner:
                             n_jobs: int = -1,
                             max_n_jobs: int | None = None,
                             base_seed: int | None = None,
-                            ):
-        
+                            time_stride: int = 1,  # <-- NEW
+                        ):
         boundary = _validate_boundary(boundary or self.boundary)
         print(f"→ Starting Pure SSA Trajectory Simulation ({n_repeats} repeats, boundary={boundary})...")
 
@@ -480,7 +488,7 @@ class SRCMRunner:
             boundary_conditions=boundary,
         )
 
-        # NEW: get all trajectories: shape (R, T, S, K)
+        # shape (R, T, S, K)
         traj = ssa_engine.run_trajectories(
             n_repeats=int(n_repeats),
             parallel=bool(parallel),
@@ -490,17 +498,20 @@ class SRCMRunner:
             progress=True,
         )
 
-        time = np.asarray(ssa_engine.timevector)
+        time = np.asarray(ssa_engine.timevector)  # (T,)
 
-        # Convert to whatever SimulationResults expects.
-        # Your mean runner does: avg_out (T,S,K) -> transpose to (S,K,T).
-        # Here: (R,T,S,K) -> (R,S,K,T)
+        # (R,T,S,K) -> (R,S,K,T)
         ssa_data = np.transpose(traj, (0, 2, 3, 1)).astype(float, copy=False)
+
+        # ---- NEW: time subsampling (works for (S,K,T) or (R,S,K,T) because time is last axis)
+        time_stride = int(time_stride)
+        if time_stride > 1:
+            time = time[::time_stride]
+            ssa_data = ssa_data[..., ::time_stride]
 
         domain = Domain(length=float(L), n_ssa=int(K), pde_multiple=1, boundary=boundary)
 
-        # No PDE in pure SSA
-        # Match dims: (R, S, K, T)
+        # No PDE in pure SSA: match dims (R,S,K,T_sub)
         pde_data = np.zeros_like(ssa_data, dtype=float)
 
         res = SimulationResults(time=time, ssa=ssa_data, pde=pde_data, domain=domain, species=self.species)
@@ -511,6 +522,7 @@ class SRCMRunner:
         meta["n_jobs"] = int(n_jobs) if n_jobs is not None else -1
         meta["max_n_jobs"] = None if max_n_jobs is None else int(max_n_jobs)
         meta["base_seed"] = None if base_seed is None else int(base_seed)
+        meta["time_stride"] = int(time_stride)  # <-- NEW
 
         print("✅ SSA Trajectory Simulation Complete.")
         return res, meta

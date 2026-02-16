@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "integrated-srcm-ssa"
-version = "1.1.4"
+version = "1.1.5"
 description = ""
 authors = ["Cgyc20 <cgyc20@bath.ac.uk>"]
 readme = "README.md"
