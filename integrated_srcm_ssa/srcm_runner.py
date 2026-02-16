@@ -218,36 +218,25 @@ class SRCMRunner:
     
     def run_hybrid_trajectories(
         self,
-        L,
-        K,
-        pde_multiple,
-        total_time,
-        dt,
-        init_counts,
-        repeats=10,
-        seed=1,
-        parallel=True,
-        *,
+        L, K, pde_multiple, total_time, dt, init_counts,
+        repeats=10, seed=1, parallel=True, *,
         boundary: str | None = None,
-        time_stride: int = 1,   # <-- NEW: keep every Nth timestep
+        time_stride: int = 1,
     ):
         boundary = _validate_boundary(boundary or self.boundary)
         print(f"→ Starting SRCM Hybrid Trajectory Simulation ({repeats} repeats, boundary={boundary})...")
 
-        # --- build model exactly the same way ---
         self.hybrid_model.domain(L=float(L), K=int(K), pde_multiple=int(pde_multiple), boundary=boundary)
         self.hybrid_model.diffusion(**self.diff_coeffs)
         self.hybrid_model.conversion(threshold=self.threshold, rate=self.conv_rate)
         self.hybrid_model.build(rates=self.rates)
 
-        # --- initial conditions ---
         init_ssa = np.zeros((len(self.species), int(K)), dtype=int)
         for spec, arr in init_counts.items():
             init_ssa[self.species_map[spec]] = arr
 
         init_pde = np.zeros((len(self.species), int(K) * int(pde_multiple)), dtype=float)
 
-        # --- run trajectories ---
         res = self.hybrid_model.run_trajectories(
             init_ssa,
             init_pde,
@@ -258,12 +247,19 @@ class SRCMRunner:
             parallel=bool(parallel),
         )
 
-        # --- subsample time + data (assumes SimulationResults-style: time is (T,), ssa/pde have time LAST axis) ---
+        # --- subsample without mutating res (SimulationResults is frozen) ---
         time_stride = int(time_stride)
+        if time_stride < 1:
+            raise ValueError(f"time_stride must be >= 1, got {time_stride}")
+
         if time_stride > 1:
-            res.time = res.time[::time_stride]
-            res.ssa = res.ssa[..., ::time_stride]
-            res.pde = res.pde[..., ::time_stride]
+            res = SimulationResults(
+                time=res.time[::time_stride],
+                ssa=res.ssa[..., ::time_stride],
+                pde=res.pde[..., ::time_stride],
+                domain=res.domain,
+                species=res.species,
+            )
 
         meta = {
             "run_type": "hybrid_trajectories",
@@ -277,7 +273,7 @@ class SRCMRunner:
             "repeats": int(repeats),
             "seed": int(seed),
             "boundary": boundary,
-            "time_stride": int(time_stride),  # <-- NEW
+            "time_stride": int(time_stride),
             "domain": {"L": float(L), "K": int(K), "pde_multiple": int(pde_multiple), "boundary": boundary},
             "reactions": [
                 {"reactants": r, "products": p, "rate_name": name, "rate": self.rates.get(name)}
@@ -287,6 +283,7 @@ class SRCMRunner:
 
         print("✅ Hybrid Trajectory Simulation Complete.")
         return res, meta
+
 
 
 
