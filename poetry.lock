@@ -832,8 +832,8 @@ numpy = "*"
 [package.source]
 type = "git"
 url = "https://github.com/Cgyc20/srcm-engine.git"
-reference = "v0.4.0"
-resolved_reference = "7e085734363d24d1edd2dea8c333614761d6f2aa"
+reference = "v0.4.1"
+resolved_reference = "b6942eaa5a547c6ae94badf0829850b1c7be80dd"
 
 [[package]]
 name = "stochastic-framework"
@@ -889,4 +889,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.15"
-content-hash = "3c757df840c0102daa1ebb0ec4c6bae1e96d6ae488906ee60bff747db60d7870"
+content-hash = "c45f7e64af84afae95ec6dc7d666a3d0aa0f6fd197b17c11cc44ed4d552425c1"
