@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import numpy as np
 from stochastic_framework import Reaction, SSA
 from srcm_engine.domain import Domain
@@ -12,12 +14,39 @@ def _validate_boundary(boundary: str) -> str:
     return boundary
 
 
+def _validate_hysteresis_pair(DC_threshold, CD_threshold) -> None:
+    dc = np.asarray(DC_threshold, dtype=float)
+    cd = np.asarray(CD_threshold, dtype=float)
+
+    if np.any(dc < 0):
+        raise ValueError("DC_threshold must be >= 0")
+    if np.any(cd < 0):
+        raise ValueError("CD_threshold must be >= 0")
+
+    if dc.ndim == 0 and cd.ndim == 0:
+        if float(dc) <= float(cd):
+            raise ValueError("DC_threshold must be strictly greater than CD_threshold")
+        return
+
+    if dc.ndim == 0:
+        dc = np.full_like(cd, float(dc), dtype=float)
+    if cd.ndim == 0:
+        cd = np.full_like(dc, float(cd), dtype=float)
+
+    if dc.shape != cd.shape:
+        raise ValueError("DC_threshold and CD_threshold must have compatible shapes")
+
+    if np.any(dc <= cd):
+        raise ValueError("DC_threshold must be strictly greater than CD_threshold for all species")
+
+
 class SRCMRunner:
     def __init__(
         self,
         species: list[str],
         *,
-        threshold: int = 4,
+        DC_threshold: int | float | dict = 6,
+        CD_threshold: int | float | dict = 4,
         conv_rate: float = 1.0,
         boundary: str = "zero-flux",
     ):
@@ -30,11 +59,11 @@ class SRCMRunner:
         self.hybrid_model = HybridModel(species=species)
         self._reaction_func = None
 
-        # Conversion defaults (can be overridden via define_conversion)
-        self.threshold = int(threshold)
+        self.DC_threshold = DC_threshold
+        self.CD_threshold = CD_threshold
         self.conv_rate = float(conv_rate)
+        _validate_hysteresis_pair(self.DC_threshold, self.CD_threshold)
 
-        # Boundary default for both SSA + Hybrid
         self.boundary = _validate_boundary(boundary)
 
     # -------------------------
@@ -50,20 +79,52 @@ class SRCMRunner:
         """Set the default boundary used by run_ssa/run_hybrid unless overridden."""
         self.boundary = _validate_boundary(boundary)
 
-    def define_conversion(self, *, threshold: int | None = None, rate: float | None = None):
+    def define_conversion(
+        self,
+        *,
+        DC_threshold: int | float | dict | None = None,
+        CD_threshold: int | float | dict | None = None,
+        rate: float | None = None,
+        threshold: int | float | dict | None = None,
+    ):
         """
         Define SSA <-> PDE conversion settings for hybrid runs.
-        threshold: particles per SSA compartment (>= 0) OR dict per species
-        rate: conversion rate (>= 0)
+
+        Preferred API
+        -------------
+        DC_threshold : higher threshold for discrete -> continuous conversion
+        CD_threshold : lower threshold for continuous -> discrete conversion
+        rate         : conversion rate (>= 0)
+
+        Backward compatibility
+        ----------------------
+        threshold    : if provided, sets both thresholds as:
+                       DC_threshold = threshold + 1
+                       CD_threshold = threshold
+                       This preserves a minimal hysteresis gap.
         """
-        if not isinstance(threshold, dict):
-            if threshold is not None:
-                thr = int(threshold)
+        new_DC = self.DC_threshold
+        new_CD = self.CD_threshold
+
+        if threshold is not None:
+            if isinstance(threshold, dict):
+                new_CD = dict(threshold)
+                new_DC = {k: float(v) + 1.0 for k, v in threshold.items()}
+            else:
+                thr = float(threshold)
                 if thr < 0:
                     raise ValueError("conversion threshold must be >= 0")
-                self.threshold = thr
-        else:
-            self.threshold = threshold
+                new_CD = thr
+                new_DC = thr + 1.0
+
+        if DC_threshold is not None:
+            new_DC = DC_threshold
+        if CD_threshold is not None:
+            new_CD = CD_threshold
+
+        _validate_hysteresis_pair(new_DC, new_CD)
+        self.DC_threshold = new_DC
+        self.CD_threshold = new_CD
 
         if rate is not None:
             cr = float(rate)
@@ -91,6 +152,11 @@ class SRCMRunner:
             "boundary": boundary,
             "diffusion_rates": dict(self.diff_coeffs),
             "reaction_rates": dict(self.rates),
+            "conversion": {
+                "DC_threshold": self.DC_threshold,
+                "CD_threshold": self.CD_threshold,
+                "rate": self.conv_rate,
+            },
             "reactions": [
                 {
                     "reactants": r,
@@ -107,21 +173,20 @@ class SRCMRunner:
     # Runners
     # -------------------------
     def run_ssa(
-                self,
-                L,
-                K,
-                total_time,
-                dt,
-                init_counts,
-                n_repeats=10,
-                *,
-                boundary: str | None = None,
-                parallel: bool = False,
-                n_jobs: int = -1,
-                max_n_jobs: int | None = None,
-                base_seed: int | None = None,
-            ):
-
+        self,
+        L,
+        K,
+        total_time,
+        dt,
+        init_counts,
+        n_repeats=10,
+        *,
+        boundary: str | None = None,
+        parallel: bool = False,
+        n_jobs: int = -1,
+        max_n_jobs: int | None = None,
+        base_seed: int | None = None,
+    ):
         boundary = _validate_boundary(boundary or self.boundary)
         print(f"→ Starting Pure SSA Simulation ({n_repeats} repeats, boundary={boundary})...")
 
@@ -144,16 +209,13 @@ class SRCMRunner:
             boundary_conditions=boundary,
         )
 
-        # avg_out = ssa_engine.run_simulation(n_repeats=int(n_repeats))
         avg_out = ssa_engine.run_simulation(
-                                            n_repeats=int(n_repeats),
-                                            parallel=bool(parallel),
-                                            n_jobs=int(n_jobs) if n_jobs is not None else -1,
-                                            max_n_jobs=max_n_jobs,
-                                            base_seed=base_seed,
-                                            )
-
-
+            n_repeats=int(n_repeats),
+            parallel=bool(parallel),
+            n_jobs=int(n_jobs) if n_jobs is not None else -1,
+            max_n_jobs=max_n_jobs,
+            base_seed=base_seed,
+        )
 
         time = np.asarray(ssa_engine.timevector)
         ssa_data = np.transpose(avg_out, (1, 2, 0))
@@ -169,13 +231,30 @@ class SRCMRunner:
         print("✅ SSA Simulation Complete.")
         return res, meta
 
-    def run_hybrid(self, L, K, pde_multiple, total_time, dt, init_counts, repeats=10, seed=1, parallel=True, *, boundary: str | None = None):
+    def run_hybrid(
+        self,
+        L,
+        K,
+        pde_multiple,
+        total_time,
+        dt,
+        init_counts,
+        repeats=10,
+        seed=1,
+        parallel=True,
+        *,
+        boundary: str | None = None,
+    ):
         boundary = _validate_boundary(boundary or self.boundary)
         print(f"→ Starting SRCM Hybrid Simulation ({repeats} repeats, boundary={boundary})...")
 
         self.hybrid_model.domain(L=float(L), K=int(K), pde_multiple=int(pde_multiple), boundary=boundary)
         self.hybrid_model.diffusion(**self.diff_coeffs)
-        self.hybrid_model.conversion(threshold=self.threshold, rate=self.conv_rate)
+        self.hybrid_model.conversion(
+            DC_threshold=self.DC_threshold,
+            CD_threshold=self.CD_threshold,
+            rate=self.conv_rate,
+        )
         self.hybrid_model.build(rates=self.rates)
 
         init_ssa = np.zeros((len(self.species), int(K)), dtype=int)
@@ -194,32 +273,33 @@ class SRCMRunner:
             parallel=bool(parallel),
         )
 
-        meta = {
+        meta = self._get_shared_meta(L, K, total_time, dt, repeats, boundary)
+        meta.update({
             "run_type": "hybrid_mean",
-            "species": self.species,
-            "threshold_particles": self.threshold,
-            "conversion_rate": self.conv_rate,
-            "diffusion_rates": dict(self.diff_coeffs),
-            "reaction_rates": dict(self.rates),
-            "total_time": float(total_time),
-            "dt": float(dt),
-            "repeats": int(repeats),
             "seed": int(seed),
-            "boundary": boundary,
-            "domain": {"L": float(L), "K": int(K), "pde_multiple": int(pde_multiple), "boundary": boundary},
-            "reactions": [
-                {"reactants": r, "products": p, "rate_name": name, "rate": self.rates.get(name)}
-                for r, p, name in self.reactions
-            ],
-        }
+            "domain": {
+                "L": float(L),
+                "K": int(K),
+                "pde_multiple": int(pde_multiple),
+                "boundary": boundary,
+            },
+        })
 
         print("✅ Hybrid Simulation Complete.")
         return res, meta
-    
+
     def run_hybrid_trajectories(
         self,
-        L, K, pde_multiple, total_time, dt, init_counts,
-        repeats=10, seed=1, parallel=True, *,
+        L,
+        K,
+        pde_multiple,
+        total_time,
+        dt,
+        init_counts,
+        repeats=10,
+        seed=1,
+        parallel=True,
+        *,
         boundary: str | None = None,
         time_stride: int = 1,
     ):
@@ -228,7 +308,11 @@ class SRCMRunner:
 
         self.hybrid_model.domain(L=float(L), K=int(K), pde_multiple=int(pde_multiple), boundary=boundary)
         self.hybrid_model.diffusion(**self.diff_coeffs)
-        self.hybrid_model.conversion(threshold=self.threshold, rate=self.conv_rate)
+        self.hybrid_model.conversion(
+            DC_threshold=self.DC_threshold,
+            CD_threshold=self.CD_threshold,
+            rate=self.conv_rate,
+        )
         self.hybrid_model.build(rates=self.rates)
 
         init_ssa = np.zeros((len(self.species), int(K)), dtype=int)
@@ -247,7 +331,6 @@ class SRCMRunner:
             parallel=bool(parallel),
         )
 
-        # --- subsample without mutating res (SimulationResults is frozen) ---
         time_stride = int(time_stride)
         if time_stride < 1:
             raise ValueError(f"time_stride must be >= 1, got {time_stride}")
@@ -261,52 +344,42 @@ class SRCMRunner:
                 species=res.species,
             )
 
-        meta = {
+        meta = self._get_shared_meta(L, K, total_time, dt, repeats, boundary)
+        meta.update({
             "run_type": "hybrid_trajectories",
-            "species": self.species,
-            "threshold_particles": self.threshold,
-            "conversion_rate": self.conv_rate,
-            "diffusion_rates": dict(self.diff_coeffs),
-            "reaction_rates": dict(self.rates),
-            "total_time": float(total_time),
-            "dt": float(dt),
-            "repeats": int(repeats),
             "seed": int(seed),
-            "boundary": boundary,
             "time_stride": int(time_stride),
-            "domain": {"L": float(L), "K": int(K), "pde_multiple": int(pde_multiple), "boundary": boundary},
-            "reactions": [
-                {"reactants": r, "products": p, "rate_name": name, "rate": self.rates.get(name)}
-                for r, p, name in self.reactions
-            ],
-        }
+            "domain": {
+                "L": float(L),
+                "K": int(K),
+                "pde_multiple": int(pde_multiple),
+                "boundary": boundary,
+            },
+        })
 
         print("✅ Hybrid Trajectory Simulation Complete.")
         return res, meta
-
-
-
 
     # -------------------------
     # FINAL FRAMES
     # -------------------------
     def run_ssa_final_frames(
-    self,
-    L,
-    K,
-    total_time,
-    dt,
-    init_counts,
-    n_repeats=10,
-    *,
-    boundary: str | None = None,
-    seed: int | None = None,
-    progress: bool = True,
-    save_path: str | None = None,
-    parallel: bool = False,
-    n_jobs: int = -1,
-    max_n_jobs: int | None = None,
-):
+        self,
+        L,
+        K,
+        total_time,
+        dt,
+        init_counts,
+        n_repeats=10,
+        *,
+        boundary: str | None = None,
+        seed: int | None = None,
+        progress: bool = True,
+        save_path: str | None = None,
+        parallel: bool = False,
+        n_jobs: int = -1,
+        max_n_jobs: int | None = None,
+    ):
         """
         Returns
         -------
@@ -336,8 +409,6 @@ class SRCMRunner:
         )
 
         R = int(n_repeats)
-
-        # Use seed as a base_seed so repeat i uses seed+i (reproducible + parallel-safe)
         base_seed = int(seed) if seed is not None else None
 
         final_ssa = ssa_engine.run_final_frames(
@@ -370,8 +441,6 @@ class SRCMRunner:
         print("✅ SSA Final Frames Complete.")
         return (final_ssa, t_final), meta
 
-
-
     def run_hybrid_final_frames(
         self,
         L,
@@ -398,7 +467,11 @@ class SRCMRunner:
 
         self.hybrid_model.domain(L=float(L), K=int(K), pde_multiple=int(pde_multiple), boundary=boundary)
         self.hybrid_model.diffusion(**self.diff_coeffs)
-        self.hybrid_model.conversion(threshold=self.threshold, rate=self.conv_rate)
+        self.hybrid_model.conversion(
+            DC_threshold=self.DC_threshold,
+            CD_threshold=self.CD_threshold,
+            rate=self.conv_rate,
+        )
         self.hybrid_model.build(rates=self.rates)
 
         init_ssa = np.zeros((len(self.species), int(K)), dtype=int)
@@ -421,48 +494,39 @@ class SRCMRunner:
             save_path=save_path,
         )
 
-        meta = {
+        meta = self._get_shared_meta(L, K, total_time, dt, repeats, boundary)
+        meta.update({
             "run_type": "hybrid_final_frames",
-            "species": self.species,
-            "threshold_particles": self.threshold,
-            "conversion_rate": self.conv_rate,
-            "diffusion_rates": dict(self.diff_coeffs),
-            "reaction_rates": dict(self.rates),
-            "total_time": float(total_time),
-            "dt": float(dt),
-            "repeats": int(repeats),
             "seed": int(seed),
-            "boundary": boundary,
-            "domain": {"L": float(L), "K": int(K), "pde_multiple": int(pde_multiple), "boundary": boundary},
-            "reactions": [
-                {"reactants": r, "products": p, "rate_name": name, "rate": self.rates.get(name)}
-                for r, p, name in self.reactions
-            ],
             "t_final": float(t_final),
             "saved_path": save_path,
-        }
+            "domain": {
+                "L": float(L),
+                "K": int(K),
+                "pde_multiple": int(pde_multiple),
+                "boundary": boundary,
+            },
+        })
 
         print("✅ Hybrid Final Frames Complete.")
         return (final_ssa, final_pde, t_final), meta
 
-
-
     def run_ssa_trajectories(
-                            self,
-                            L,
-                            K,
-                            total_time,
-                            dt,
-                            init_counts,
-                            n_repeats=10,
-                            *,
-                            boundary: str | None = None,
-                            parallel: bool = False,
-                            n_jobs: int = -1,
-                            max_n_jobs: int | None = None,
-                            base_seed: int | None = None,
-                            time_stride: int = 1,  # <-- NEW
-                        ):
+        self,
+        L,
+        K,
+        total_time,
+        dt,
+        init_counts,
+        n_repeats=10,
+        *,
+        boundary: str | None = None,
+        parallel: bool = False,
+        n_jobs: int = -1,
+        max_n_jobs: int | None = None,
+        base_seed: int | None = None,
+        time_stride: int = 1,
+    ):
         boundary = _validate_boundary(boundary or self.boundary)
         print(f"→ Starting Pure SSA Trajectory Simulation ({n_repeats} repeats, boundary={boundary})...")
 
@@ -485,7 +549,6 @@ class SRCMRunner:
             boundary_conditions=boundary,
         )
 
-        # shape (R, T, S, K)
         traj = ssa_engine.run_trajectories(
             n_repeats=int(n_repeats),
             parallel=bool(parallel),
@@ -495,20 +558,17 @@ class SRCMRunner:
             progress=True,
         )
 
-        time = np.asarray(ssa_engine.timevector)  # (T,)
-
-        # (R,T,S,K) -> (R,S,K,T)
+        time = np.asarray(ssa_engine.timevector)
         ssa_data = np.transpose(traj, (0, 2, 3, 1)).astype(float, copy=False)
 
-        # ---- NEW: time subsampling (works for (S,K,T) or (R,S,K,T) because time is last axis)
         time_stride = int(time_stride)
+        if time_stride < 1:
+            raise ValueError(f"time_stride must be >= 1, got {time_stride}")
         if time_stride > 1:
             time = time[::time_stride]
             ssa_data = ssa_data[..., ::time_stride]
 
         domain = Domain(length=float(L), n_ssa=int(K), pde_multiple=1, boundary=boundary)
-
-        # No PDE in pure SSA: match dims (R,S,K,T_sub)
         pde_data = np.zeros_like(ssa_data, dtype=float)
 
         res = SimulationResults(time=time, ssa=ssa_data, pde=pde_data, domain=domain, species=self.species)
@@ -519,7 +579,7 @@ class SRCMRunner:
         meta["n_jobs"] = int(n_jobs) if n_jobs is not None else -1
         meta["max_n_jobs"] = None if max_n_jobs is None else int(max_n_jobs)
         meta["base_seed"] = None if base_seed is None else int(base_seed)
-        meta["time_stride"] = int(time_stride)  # <-- NEW
+        meta["time_stride"] = int(time_stride)
 
         print("✅ SSA Trajectory Simulation Complete.")
         return res, meta
