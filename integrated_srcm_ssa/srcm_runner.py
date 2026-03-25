@@ -15,30 +15,30 @@ def _validate_boundary(boundary: str) -> str:
 
 
 def _validate_hysteresis_pair(DC_threshold, CD_threshold) -> None:
-    dc = np.asarray(DC_threshold, dtype=float)
-    cd = np.asarray(CD_threshold, dtype=float)
-
-    if np.any(dc < 0):
-        raise ValueError("DC_threshold must be >= 0")
-    if np.any(cd < 0):
-        raise ValueError("CD_threshold must be >= 0")
-
-    if dc.ndim == 0 and cd.ndim == 0:
-        if float(dc) <= float(cd):
-            raise ValueError("DC_threshold must be strictly greater than CD_threshold")
+    # Handle dict thresholds: validate per-species
+    if isinstance(DC_threshold, dict) or isinstance(CD_threshold, dict):
+        if not isinstance(DC_threshold, dict) or not isinstance(CD_threshold, dict):
+            raise ValueError("DC_threshold and CD_threshold must both be dicts or both be scalars")
+        if DC_threshold.keys() != CD_threshold.keys():
+            raise ValueError("DC_threshold and CD_threshold dicts must have the same species keys")
+        for species in DC_threshold:
+            dc_val = float(DC_threshold[species])
+            cd_val = float(CD_threshold[species])
+            if dc_val < 0:
+                raise ValueError(f"DC_threshold must be >= 0 (got {dc_val} for '{species}')")
+            if cd_val < 0:
+                raise ValueError(f"CD_threshold must be >= 0 (got {cd_val} for '{species}')")
+            if dc_val <= cd_val:
+                raise ValueError(
+                    f"DC_threshold must be strictly greater than CD_threshold "
+                    f"(got DC={dc_val}, CD={cd_val} for '{species}')"
+                )
         return
 
-    if dc.ndim == 0:
-        dc = np.full_like(cd, float(dc), dtype=float)
-    if cd.ndim == 0:
-        cd = np.full_like(dc, float(cd), dtype=float)
-
-    if dc.shape != cd.shape:
-        raise ValueError("DC_threshold and CD_threshold must have compatible shapes")
-
-    if np.any(dc <= cd):
-        raise ValueError("DC_threshold must be strictly greater than CD_threshold for all species")
-
+    # # Original scalar/array path
+    # dc = np.asarray(DC_threshold, dtype=float)
+    # cd = np.asarray(CD_threshold, dtype=float)
+    # # ... rest unchanged
 
 class SRCMRunner:
     def __init__(

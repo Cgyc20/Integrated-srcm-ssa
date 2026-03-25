@@ -10,7 +10,11 @@ sim = SRCMRunner(species=["A", "B"])
 sim.define_rates(alpha=0.01, beta=0.01)
 sim.define_diffusion(A=0.1, B=0.1)
 #sim.define_conversion(threshold=20, rate=2.0)
-sim.define_conversion(threshold={"A": 5, "B": 3}, rate=1.0)
+sim.define_conversion(
+    DC_threshold={"A": 8, "B": 6},
+    CD_threshold={"A": 5, "B": 3},
+    rate=1.0,
+)
 sim.add_reaction({"A": 1}, {"B": 1}, "alpha")
 sim.add_reaction({"B": 1}, {"A": 1}, "beta")
 sim.set_pde_reactions(lambda A, B, r: (

@@ -16,7 +16,7 @@ pyyaml = "*"
 
 
 stochastic-framework = {git = "https://github.com/Cgyc20/stochastic_framework.git", tag = "v0.2.3"}
-srcm-engine = {git = "https://github.com/Cgyc20/srcm-engine.git", tag ="v0.3.0" } 
+srcm-engine = {git = "https://github.com/Cgyc20/srcm-engine.git", tag ="v0.4.1" } 
 
 [build-system]
 requires = ["poetry-core"]
